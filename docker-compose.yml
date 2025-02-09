@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"  # FastAPI
+      - "8501:8501"  # Streamlit
+    volumes:
+      - .:/app
+      - ./chroma_db:/app/chroma_db
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - ai-network
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  redis_data: 
