@@ -1,98 +1,138 @@
-# AI Tool API 🤖
+# AI Araçları API 🤖
 
-Bu proje, yapay zeka tabanlı araçlar sunan bir REST API servisi ve bu servisi kullanan bir web arayüzüdür.
+Bu proje, yapay zeka tabanlı araçlar sunan bir REST API servisi ve kullanıcı dostu bir web arayüzüdür.
 
 ## 🌟 Özellikler
 
-- 📝 **Döküman İşlemleri**
-  - Metin dosyası yükleme (.txt, .pdf, .md, .rst)
-  - Vektör tabanlı benzerlik araması
-  - Önbellek desteği
-- 🔢 **Matematik İşlemleri**
-  - Çoklu sayı çarpma işlemi
-- 🔑 **Anahtar Kelime Çıkarma**
-  - Google Gemini AI ile metin analizi
-  - Özelleştirilebilir anahtar kelime sayısı
+### 📝 Döküman İşlemleri
+- PDF ve metin dosyası yükleme
+- Vektör tabanlı benzerlik araması
+- Akıllı metin bölümleme
+- Çoklu dil desteği
+
+### 🔢 Matematik İşlemleri
+- Temel aritmetik işlemler
+- Trigonometrik hesaplamalar
+- Logaritmik işlemler
+- Karekök hesaplamaları
+
+### 🔑 Anahtar Kelime Çıkarma
+- Google Gemini AI destekli analiz
+- Özelleştirilebilir anahtar kelime sayısı
+- Çoklu dil desteği
+- Bağlam tabanlı analiz
 
 ## 🚀 Başlangıç
 
 ### Gereksinimler
-
 - Python 3.11+
-- Docker ve Docker Compose
 - Google Gemini API Anahtarı
 
 ### Kurulum
 
 1. Projeyi klonlayın:
 ```bash
-git clone https://github.com/[kullanıcı-adı]/ai-tool-api.git
-cd ai-tool-api
+git clone [repo-url]
+cd [proje-klasörü]
 ```
 
-2. .env dosyasını oluşturun:
+2. Sanal ortam oluşturun ve aktif edin:
+```bash
+python -m venv venv
+# Windows için
+venv\Scripts\activate
+# Linux/Mac için
+source venv/bin/activate
+```
+
+3. Bağımlılıkları yükleyin:
+```bash
+pip install -r requirements.txt
+```
+
+4. .env dosyasını oluşturun:
 ```bash
 cp .env.example .env
+# .env dosyasını düzenleyip Google API anahtarınızı ekleyin
 ```
 
-3. .env dosyasını düzenleyin ve Google API anahtarınızı ekleyin:
-```
-GOOGLE_API_KEY=your_api_key_here
-```
+### Çalıştırma
 
-4. Docker ile çalıştırın:
+1. API'yi başlatın:
 ```bash
-docker-compose up --build
+uvicorn app.main:app --reload
 ```
 
-### Kullanım
+2. Web arayüzünü başlatın:
+```bash
+streamlit run app/streamlit_app.py
+```
 
-Uygulama başlatıldıktan sonra:
-- FastAPI servisi: http://localhost:8000
-- Streamlit arayüzü: http://localhost:8501
-- API dökümantasyonu: http://localhost:8000/docs
+## 📚 API Kullanımı
+
+### Döküman Yükleme
+```python
+POST /documents/upload
+# Multipart form data ile dosya yükleme
+```
+
+### Vektör Arama
+```python
+POST /vector/search
+{
+    "query": "arama metni",
+    "top_k": 5
+}
+```
+
+### Matematik İşlemleri
+```python
+POST /math/solve
+{
+    "operation": "3 * 4 + sqrt(16)"
+}
+```
+
+### Anahtar Kelime Çıkarma
+```python
+POST /keywords
+{
+    "text": "analiz edilecek metin",
+    "num_keywords": 5
+}
+```
 
 ## 🛠️ Teknolojiler
 
-- **Backend**
-  - FastAPI
-  - ChromaDB (Vektör Veritabanı)
-  - Google Gemini AI
-  - Redis (Önbellek)
-  - Prometheus (Metrik Toplama)
+### Backend
+- FastAPI - Modern web framework
+- LangChain - LLM entegrasyonu
+- ChromaDB - Vektör veritabanı
+- Google Gemini AI - Yapay zeka modeli
 
-- **Frontend**
-  - Streamlit
-  - Custom CSS Theming
+### Frontend
+- Streamlit - Web arayüzü
+- Streamlit Theming - Özelleştirilmiş temalar
 
-## 📊 Metrikler ve İzleme
+## 🔒 Güvenlik
+- API anahtarı doğrulama
+- Güvenli dosya işleme
+- Girdi doğrulama
+- Hata yönetimi
 
-- Prometheus metrikleri: http://localhost:8000/metrics
-- Request loglama
-- Performans izleme
-
-## 🧪 Testler
+## 🧪 Test
 
 Testleri çalıştırmak için:
-
 ```bash
 pytest tests/
 ```
 
-## 🔒 Güvenlik
+## 📝 Lisans
 
-- Non-root Docker kullanıcısı
-- API anahtarı yönetimi
-- Güvenli dosya işleme
+Bu proje MIT lisansı altında lisanslanmıştır.
 
-## 📄 Lisans
+## 👥 İletişim
 
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakınız.
-
-## 👥 Katkıda Bulunma
-
-1. Fork edin
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Değişikliklerinizi commit edin (`git commit -m 'feat: Add amazing feature'`)
-4. Branch'inizi push edin (`git push origin feature/amazing-feature`)
-5. Pull Request oluşturun 
+Proje ile ilgili sorularınız için:
+- GitHub Issues
+- E-posta: [e-posta-adresi] 

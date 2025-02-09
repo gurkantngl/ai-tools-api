@@ -7,6 +7,13 @@ from typing import List, Dict, Any
 import chromadb
 from chromadb.db.base import UniqueConstraintError
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.vectorstores import Chroma
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_core.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.output_parsers import CommaSeparatedListOutputParser
 import os
 from dotenv import load_dotenv
 import pdfplumber
@@ -55,23 +62,49 @@ def clean_text(text: str) -> str:
     
     return text.strip()
 
-# ChromaDB istemcisini başlat
-chroma_client = chromadb.PersistentClient(path="chroma_db")
+# Embedding modeli
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
 
-# Varolan koleksiyonu sil
-try:
-    chroma_client.delete_collection(name="documents")
-except ValueError:
-    pass
+# Vektör veritabanı
+vectorstore = Chroma(
+    persist_directory="chroma_db",
+    embedding_function=embeddings,
+    collection_name="documents"
+)
 
-# Yeni koleksiyon oluştur
-collection = chroma_client.create_collection(name="documents")
+# Text splitter
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=200,
+    length_function=len,
+)
 
 # LLM modelini başlat
 llm = ChatGoogleGenerativeAI(
     model="gemini-pro",
     google_api_key=os.getenv("GOOGLE_API_KEY"),
     convert_system_message_to_human=True
+)
+
+# Anahtar kelime çıkarma için prompt template ve chain
+keyword_prompt = PromptTemplate(
+    input_variables=["text", "num_keywords"],
+    template="""Aşağıdaki metinden tam olarak {num_keywords} adet anahtar kelime çıkar.
+    Eğer yeterli anahtar kelime bulamazsan, metindeki önemli kelimeleri veya kelime gruplarını kullan.
+    Sadece anahtar kelimeleri virgülle ayırarak liste halinde döndür.
+    Başka bir şey ekleme.
+    Tam olarak {num_keywords} adet anahtar kelime döndürmelisin.
+
+    Metin: {text}
+    """
+)
+
+keyword_chain = LLMChain(
+    llm=llm,
+    prompt=keyword_prompt,
+    output_parser=CommaSeparatedListOutputParser()
 )
 
 def extract_text_from_file(file: UploadFile) -> str:
@@ -128,33 +161,27 @@ async def upload_document(file: UploadFile = File(...)):
         # Dosya içeriğini oku
         text_content = extract_text_from_file(file)
         
-        # Dosya zaten var mı kontrol et
-        existing_docs = collection.get(
-            where={"source": file.filename}
-        )
+        # Metni parçalara ayır
+        texts = text_splitter.split_text(text_content)
         
-        if existing_docs and len(existing_docs['ids']) > 0:
-            # Varolan döküman için 200 dön
-            return JSONResponse(
-                status_code=200,
-                content={"message": f"{file.filename} zaten yüklü"}
-            )
-            
         # Metadata hazırla
         metadata = {
             "source": file.filename,
-            "type": file.content_type or "text/plain",  # Eğer content_type None ise varsayılan değer kullan
+            "type": file.content_type or "text/plain",
             "size": len(text_content)
         }
-            
-        # Dökümanı koleksiyona ekle
-        collection.add(
-            documents=[text_content],
-            metadatas=[metadata],
-            ids=[f"doc_{len(collection.get()['ids']) + 1}"]
-        )
         
-        # Yeni döküman için 201 dön
+        # Dökümanları oluştur
+        documents = [
+            Document(
+                page_content=text,
+                metadata={**metadata, "chunk": i}
+            ) for i, text in enumerate(texts)
+        ]
+        
+        # Vektör veritabanına ekle
+        vectorstore.add_documents(documents)
+        
         return JSONResponse(
             status_code=201,
             content={"message": f"{file.filename} başarıyla yüklendi"}
@@ -170,26 +197,21 @@ async def upload_document(file: UploadFile = File(...)):
 )
 async def vector_search(request: SearchRequest):
     try:
-        # Arama yap
-        results = collection.query(
-            query_texts=[request.query],
-            n_results=request.top_k
+        # Benzerlik araması yap
+        results = vectorstore.similarity_search_with_relevance_scores(
+            request.query,
+            k=request.top_k
         )
         
         # Sonuçları formatla
         formatted_results = []
-        if results['ids'] and len(results['ids'][0]) > 0:
-            for i in range(len(results['ids'][0])):
-                # Benzerlik skorunu hesapla (ChromaDB L2 mesafesini benzerlik skoruna dönüştür)
-                distance = float(results['distances'][0][i]) if 'distances' in results else 1.0
-                similarity = 1.0 / (1.0 + distance)  # Mesafeyi 0-1 arası benzerlik skoruna dönüştür
-                
-                formatted_results.append({
-                    "id": results['ids'][0][i],
-                    "content": results['documents'][0][i],
-                    "metadata": results['metadatas'][0][i],
-                    "similarity": similarity
-                })
+        for doc, score in results:
+            formatted_results.append({
+                "id": doc.metadata.get("chunk", ""),
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+                "similarity": score
+            })
         
         return {"results": formatted_results}
     except Exception as e:
@@ -203,28 +225,14 @@ async def vector_search(request: SearchRequest):
 )
 async def extract_keywords(request: KeywordRequest):
     try:
-        # LLM'e prompt gönder
-        prompt = f"""
-        Aşağıdaki metinden tam olarak {request.num_keywords} adet anahtar kelime çıkar.
-        Eğer yeterli anahtar kelime bulamazsan, metindeki önemli kelimeleri veya kelime gruplarını kullan.
-        Sadece anahtar kelimeleri virgülle ayırarak liste halinde döndür.
-        Başka bir şey ekleme.
-        Tam olarak {request.num_keywords} adet anahtar kelime döndürmelisin.
-
-        Metin: {request.text}
-        """
+        # LangChain ile anahtar kelimeleri çıkar
+        keywords = await keyword_chain.ainvoke({
+            "text": request.text,
+            "num_keywords": request.num_keywords
+        })
         
-        response = llm.invoke(prompt)
-        
-        # Yanıtı işle
-        keywords = [kw.strip() for kw in response.content.split(",")]
-        
-        # Eğer istenen sayıda anahtar kelime yoksa, son kelimeyi tekrarla
-        while len(keywords) < request.num_keywords:
-            keywords.append(keywords[-1])
-        
-        # Eğer fazla anahtar kelime varsa, ilk N tanesini al
-        keywords = keywords[:request.num_keywords]
+        # Sonucu formatla
+        keywords = keywords["text"][:request.num_keywords]
         
         return {
             "keywords": keywords,
